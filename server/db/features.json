@@ -1,0 +1,8 @@
+{
+  "LOC12345": {
+    "insites": {
+      "enabled": true
+    },
+    "scans_allowed": 3
+  }
+}

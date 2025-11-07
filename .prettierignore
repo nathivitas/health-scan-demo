@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+out
+.client
+.cache
+vite.cache
+coverage
+*.log
+*.gz
+*.br

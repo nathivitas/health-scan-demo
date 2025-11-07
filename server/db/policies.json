@@ -1,0 +1,21 @@
+{
+  "packages": {
+    "PLUS": {
+      "scans_allowed": 3
+    },
+    "PRO": {
+      "scans_allowed": 5
+    },
+    "FREE": {
+      "scans_allowed": 0
+    }
+  },
+  "sections": {
+    "insites": {
+      "enabled_for": [
+        "PLUS",
+        "PRO"
+      ]
+    }
+  }
+}

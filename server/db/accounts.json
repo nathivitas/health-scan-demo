@@ -1,0 +1,16 @@
+[
+  {
+    "mc_id": "LOC12345",
+    "legal_name": "Acme Roofing LLC",
+    "country": "US",
+    "package": "PLUS",
+    "website": "https://www.acmeroof.example"
+  },
+  {
+    "mc_id": "LOC99999",
+    "legal_name": "Free Trial Test",
+    "country": "US",
+    "package": "FREE",
+    "website": "https://www.trial.example"
+  }
+]
