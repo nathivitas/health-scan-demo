@@ -6,25 +6,34 @@ export default function App() {
   const [mcId, setMcId] = useState('LOC12345');
   const [section, setSection] = useState('insites');
 
-  const [elig, setElig] = useState(null);        // state returned from dry-run (controls real button)
+  // Eligibility snapshot from the LAST manual dry-run
+  const [elig, setElig] = useState(null);
+
+  // Reports
   const [dryReport, setDryReport] = useState(null);
   const [realReport, setRealReport] = useState(null);
 
+  // UI state
   const [terms, setTerms] = useState('Roofing, Gutters');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Load DB for dropdowns
+  // Load DB once
   useEffect(() => {
-    fetchDb().then(setDb).catch(e => setError(String(e)));
+    fetchDb().then(setDb).catch((e) => setError(String(e)));
   }, []);
 
-  const account = useMemo(
-    () => db?.accounts?.find(a => a.mc_id === mcId),
-    [db, mcId]
-  );
+  const account = useMemo(() => db?.accounts?.find((a) => a.mc_id === mcId), [db, mcId]);
 
-  // Always allowed — never consumes quota — returns report + eligibility state
+  // On account/section change: clear previous results
+  useEffect(() => {
+    setElig(null);
+    setDryReport(null);
+    setRealReport(null);
+    setError(null);
+  }, [mcId, section]);
+
+  // DRY-RUN: always allowed, returns report, no mutations
   async function runDry() {
     setError(null);
     setLoading(true);
@@ -39,17 +48,17 @@ export default function App() {
     }
   }
 
-  // Real scan — consumes quota + sets cooldown — returns real scan report
+  // REAL: gated by last dry-run -> real_eligible_now
   async function runReal() {
     setError(null);
     setLoading(true);
     try {
       const res = await trigger(mcId, section, { search_terms: toArray(terms) });
       setRealReport(res.report || null);
-      // After real run, refresh eligibility state via new dry-run
-      const updated = await dryRun(mcId, section, { search_terms: toArray(terms) });
-      setElig(updated);
-      setDryReport(updated.report || null);
+      // Refresh eligibility snapshot after real run
+      const snapshot = await dryRun(mcId, section, { search_terms: toArray(terms) });
+      setElig(snapshot);
+      setDryReport(snapshot.report || null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -57,14 +66,9 @@ export default function App() {
     }
   }
 
-  // Auto-check on account/section change
-  useEffect(() => {
-    runDry();
-    // eslint-disable-next-line
-  }, [mcId, section]);
-
-  // Enable Real button only when backend says real_eligible_now = true
+  // Real button enabled only when backend says yes
   const realEnabled = !!elig?.real_eligible_now;
+  const notAuthorized = elig && Number(elig.scans_allowed) === 0;
 
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
@@ -74,8 +78,8 @@ export default function App() {
       <div className="card" style={card}>
         <div style={row}>
           <label>MC ID:&nbsp;
-            <select value={mcId} onChange={e => setMcId(e.target.value)}>
-              {db?.accounts?.map(a => (
+            <select value={mcId} onChange={(e) => setMcId(e.target.value)}>
+              {db?.accounts?.map((a) => (
                 <option key={a.mc_id} value={a.mc_id}>
                   {a.mc_id} — {a.legal_name}
                 </option>
@@ -84,7 +88,7 @@ export default function App() {
           </label>
 
           <label>Section:&nbsp;
-            <select value={section} onChange={e => setSection(e.target.value)}>
+            <select value={section} onChange={(e) => setSection(e.target.value)}>
               <option value="insites">insites</option>
             </select>
           </label>
@@ -92,7 +96,7 @@ export default function App() {
           <label>Keywords/Products:&nbsp;
             <input
               value={terms}
-              onChange={e => setTerms(e.target.value)}
+              onChange={(e) => setTerms(e.target.value)}
               placeholder="roofing, gutters"
               style={{ minWidth: 240 }}
             />
@@ -101,6 +105,7 @@ export default function App() {
           <button className="btn" onClick={runDry} disabled={loading} style={btn}>
             Check eligibility (dry-run)
           </button>
+          <span style={{ opacity: 0.7 }}>Dry-run is free and never affects quota.</span>
         </div>
       </div>
 
@@ -126,7 +131,7 @@ export default function App() {
 
       {/* Eligibility snapshot */}
       <div className="card" style={card}>
-        <h3>Eligibility (from dry-run)</h3>
+        <h3>Eligibility (from last dry-run)</h3>
         {elig ? (
           <>
             <div style={row}>
@@ -136,14 +141,22 @@ export default function App() {
 
             <div style={row}>
               <div><b>cooldown:</b> {elig.cooldown_active ? `active until ${elig.cooldown_expires_at}` : 'none'}</div>
-              <div><b>usage (last 24h):</b> {elig.scans_used_in_window} / {elig.scans_allowed}</div>
+              <div><b>usage (rolling 24h):</b> {elig.scans_used_in_window} / {elig.scans_allowed}</div>
             </div>
+
+            {notAuthorized && (
+              <div style={{ color: '#a00' }}>
+                Real scans are not authorized for this plan. Dry-run is available.
+              </div>
+            )}
 
             {elig.products?.length ? (
               <div style={row}><b>products:</b> <code>{JSON.stringify(elig.products)}</code></div>
             ) : null}
           </>
-        ) : <i>Loading…</i>}
+        ) : (
+          <i>No data yet. Click “Check eligibility (dry-run)”.</i>
+        )}
       </div>
 
       {/* Dry-run report */}
@@ -152,7 +165,7 @@ export default function App() {
         {dryReport ? (
           <pre style={mono}>{JSON.stringify(dryReport, null, 2)}</pre>
         ) : (
-          <i>Click “Check eligibility (dry-run)” to generate preview.</i>
+          <i>No report yet. Click “Check eligibility (dry-run)”.</i>
         )}
       </div>
 
@@ -164,8 +177,13 @@ export default function App() {
           onClick={runReal}
           disabled={!realEnabled || loading}
           style={realEnabled ? btn : btnDisabled}
+          title={
+            notAuthorized
+              ? 'Not authorized for real scans on this plan'
+              : 'Run a dry-run first or wait for cooldown/quota'
+          }
         >
-          {realEnabled ? 'Run Scan (real)' : 'Not eligible'}
+          {realEnabled ? 'Run Scan (real)' : (notAuthorized ? 'Not authorized' : 'Not eligible')}
         </button>
 
         {realReport && (
@@ -179,12 +197,11 @@ export default function App() {
   );
 }
 
-// Utilities
 function toArray(s) {
-  return s ? s.split(',').map(x => x.trim()).filter(Boolean) : [];
+  return s ? s.split(',').map((x) => x.trim()).filter(Boolean) : [];
 }
 
-// UI styles (minimal + consistent)
+// Styles
 const card = { border: '1px solid #ddd', borderRadius: 12, padding: 16, marginBottom: 16 };
 const row = { display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' };
 const mono = { whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, monospace' };
